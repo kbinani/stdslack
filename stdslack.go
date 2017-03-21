@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"flag"
@@ -19,6 +20,7 @@ var (
 	token      string
 	configPath string
 	slackToken string
+	tee        bool
 	err        error
 )
 
@@ -39,6 +41,7 @@ func init() {
 	flag.StringVar(&channel, "c", "", "")
 	flag.StringVar(&token, "token", "", "")
 	flag.StringVar(&token, "t", "", "")
+	flag.BoolVar(&tee, "tee", false, "")
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, usage)
 	}
@@ -94,16 +97,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	var content bytes.Buffer
-	_, err = io.Copy(&content, os.Stdin)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	if tee {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			line := scanner.Text()
+			fmt.Fprintf(os.Stdout, "%s\n", line)
+			err = slackC.SendMessage(channel, line, "stdslack")
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		}
+	} else {
+		var content bytes.Buffer
+		_, err = io.Copy(&content, os.Stdin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 
-	err = slackC.SendMessage(channel, content.String(), "stdslack")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		err = slackC.SendMessage(channel, content.String(), "stdslack")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 }
